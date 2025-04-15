@@ -1,21 +1,21 @@
 {
   "project_info": {
-    "project_number": "328985613190",
-    "project_id": "project-44c53",
-    "storage_bucket": "project-44c53.firebasestorage.app"
+    "project_number": "13462649638",
+    "project_id": "hustle-f0a5d",
+    "storage_bucket": "hustle-f0a5d.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:328985613190:android:c89b50218ebbe3d76fd207",
+        "mobilesdk_app_id": "1:13462649638:android:84cd9a4600c351a529dfe7",
         "android_client_info": {
-          "package_name": "com.hustle.project"
+          "package_name": "com.project"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBN_lOAmxP9b-ejA5vco_DFBL9aDMoAVKk"
+          "current_key": "AIzaSyA7Ctke8U7vKmf7zQ_8W2uPGvLZkkbGW34"
         }
       ],
       "services": {

@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { NavigationContainer } from '@react-navigation/native';
 import TaskScreen from './TaskScreen';  // Import TaskScreen from a separate file
 import BudgetScreen from './BudgetScreen';
+import ForgotPasswordScreen from './ForgotPasswordScreen';
+import auth from '@react-native-firebase/auth';
 
 // Login Screen Component
 const LoginScreen = ({ navigation }) => {
@@ -17,6 +19,7 @@ const LoginScreen = ({ navigation }) => {
       <TextInput
         style={styles.input}
         placeholder="Username"
+        placeholderTextColor="gray"
         value={username}
         onChangeText={setUsername}
       />
@@ -24,13 +27,25 @@ const LoginScreen = ({ navigation }) => {
       <TextInput
         style={styles.input}
         placeholder="Password"
+        placeholderTextColor="gray"
         secureTextEntry
         value={password}
         onChangeText={setPassword}
       />
 
-      <TouchableOpacity style={styles.loginButton} onPress={() => navigation.navigate('Tasks')}>
+      <TouchableOpacity style={styles.loginButton} onPress={async () => {
+    try {
+      await auth().signInWithEmailAndPassword(username, password); // assuming username = email
+      navigation.navigate('Tasks');
+    } catch (error) {
+      alert(error.message);
+    }
+  }}>
         <Text style={styles.loginText}>Login</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
+      <Text style={styles.signupText}>Forgot Password?</Text>
       </TouchableOpacity>
 
       <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
@@ -53,6 +68,7 @@ const SignUpScreen = ({ navigation }) => {
       <TextInput
         style={styles.input}
         placeholder="Username"
+        placeholderTextColor="gray"
         value={username}
         onChangeText={setUsername}
       />
@@ -60,6 +76,7 @@ const SignUpScreen = ({ navigation }) => {
       <TextInput
         style={styles.input}
         placeholder="Email"
+        placeholderTextColor="gray"
         keyboardType="email-address"
         value={email}
         onChangeText={setEmail}
@@ -68,16 +85,25 @@ const SignUpScreen = ({ navigation }) => {
       <TextInput
         style={styles.input}
         placeholder="Password"
+        placeholderTextColor="gray"
         secureTextEntry
         value={password}
         onChangeText={setPassword}
       />
 
-      <TouchableOpacity style={styles.signupButton} onPress={() => navigation.navigate('Login')}>
+      <TouchableOpacity style={styles.signupButton} onPress={async () => {
+    try {
+      await auth().createUserWithEmailAndPassword(email, password);
+      alert('Account created!');
+      navigation.navigate('Login');
+    } catch (error) {
+      alert(error.message);
+    }
+  }}>
         <Text style={styles.loginText}>Sign Up</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+     <TouchableOpacity onPress={() => navigation.navigate('Login')}>
         <Text style={styles.signupText}>Already have an account? Login</Text>
       </TouchableOpacity>
     </View>
@@ -87,13 +113,42 @@ const SignUpScreen = ({ navigation }) => {
 const Stack = createStackNavigator();
 
 export default function App() {
+  const [initializing, setInitializing] = useState(true);
+  const [user, setUser] = useState(null);
+
+  // Monitor auth state
+  useEffect(() => {
+    const unsubscribe = auth().onAuthStateChanged(currentUser => {
+      setUser(currentUser);
+      if (initializing) setInitializing(false);
+    });
+    return unsubscribe; // Cleanup
+  }, []);
+
+  if (initializing) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="black" />
+      </View>
+    );
+  }
+
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="Login" component={LoginScreen} />
-        <Stack.Screen name="SignUp" component={SignUpScreen} />
-        <Stack.Screen name="Tasks" component={TaskScreen} />
-        <Stack.Screen name="BudgetScreen" component={BudgetScreen} />
+        {user ? (
+          <>
+            <Stack.Screen name="Tasks" component={TaskScreen} />
+            <Stack.Screen name="BudgetScreen" component={BudgetScreen} />
+          </>
+        ) : (
+          <>
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="SignUp" component={SignUpScreen} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+
+          </>
+        )}
       </Stack.Navigator>
     </NavigationContainer>
   );
@@ -121,6 +176,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     marginBottom: 10,
   },
+ 
   loginButton: {
     backgroundColor: 'black',
     paddingVertical: 12,
@@ -129,7 +185,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   signupButton: {
-    backgroundColor: 'black',
+    backgroundColor: 'blue',
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 10,
