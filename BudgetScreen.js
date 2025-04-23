@@ -90,6 +90,7 @@ const [editDate, setEditDate] = useState(new Date());
         const name = user.displayName || email.split('@')[0];
         console.log('✅ User from onAuthStateChanged:', email);
         setUserEmail(email);
+        refreshExpenses(user.email);
         setUsername(name);
         createTables();
   
@@ -234,7 +235,7 @@ const [editDate, setEditDate] = useState(new Date());
     setViewMode(modes[nextIndex]);
   };
 
-  const totalExpense = useMemo(() => {
+ /* const totalExpense = useMemo(() => {
     const today = dayjs();
     return expenses.reduce((sum, e) => {
       const d = dayjs(e.date, 'YYYY-MM-DD');
@@ -245,7 +246,7 @@ const [editDate, setEditDate] = useState(new Date());
       return sum;
     }, 0);
   }, [expenses, viewMode]);
-
+*/
   const calculatedAmount = (parseFloat(price) || 0) * (parseFloat(quantity) || 0);
 
   const viewModeText = {
@@ -264,15 +265,15 @@ const [editDate, setEditDate] = useState(new Date());
   
   const handleFetch = () => {
     if (!userEmail) return;
+    const formatted = dayjs(singleDate);
+    const from = dayjs(fromDate);
+    const to = dayjs(toDate);
 
     if (dateType === 'single') {
-      const formattedDate = dayjs(singleDate);
-      if (singleMode === 'date') fetchExpensesByDate(userEmail, formattedDate.format('YYYY-MM-DD'), setFilteredExpenses);
-      if (singleMode === 'month') fetchExpensesByMonth(userEmail, formattedDate.format('MM'), formattedDate.format('YYYY'), setFilteredExpenses);
-      if (singleMode === 'year') fetchExpensesByYear(userEmail, formattedDate.format('YYYY'), setFilteredExpenses);
+      if (singleMode === 'date') fetchExpensesByDate(userEmail, formatted.format('YYYY-MM-DD'), setFilteredExpenses);
+      if (singleMode === 'month') fetchExpensesByMonth(userEmail, formatted.format('MM'), formatted.format('YYYY'), setFilteredExpenses);
+      if (singleMode === 'year') fetchExpensesByYear(userEmail, formatted.format('YYYY'), setFilteredExpenses);
     } else {
-      const from = dayjs(fromDate);
-      const to = dayjs(toDate);
       if (!from.isBefore(to)) {
         Toast.show({ type: 'error', text1: 'Invalid Range', text2: 'End must be after start' });
         return;
@@ -289,61 +290,109 @@ const [editDate, setEditDate] = useState(new Date());
     setEditModalVisible(true);
   };
 
+  const handleEditChange = (index, field, value) => {
+    const updated = [...editExpenses];
+    updated[index][field] = value;
+    if (field === 'price' || field === 'quantity') {
+      updated[index].amount = parseFloat(updated[index].price) * parseFloat(updated[index].quantity);
+    }
+    setFilteredExpenses(updated);
+  };
+
   const handleUpdateExpense = (expense) => {
-    updateExpense(expense, () => Toast.show({ type: 'success', text1: 'Updated successfully' }));
+    updateExpense(expense, () => {
+      Toast.show({ type: 'success', text1: 'Updated successfully' });
+      fetchExpensesForDate(userEmail, dayjs(editDate).format('YYYY-MM-DD'), setEditExpenses);
+      refreshExpenses(); // Refresh all expenses
+    });
   };
 
   const handleDeleteExpense = (id) => {
     deleteExpense(id, () => {
-      setEditExpenses(prev => prev.filter(e => e.id !== id));
+      setFilteredExpenses(prev => prev.filter(e => e.id !== id));
       Toast.show({ type: 'success', text1: 'Deleted successfully' });
+      refreshExpenses(); // 👈 refresh list
     });
   };
 
-  
+  const refreshExpenses = (email = userEmail) => {
+    fetchAllExpensesForUser(email, (data) => {
+      const cleaned = data.map(e => ({
+        ...e,
+        date: dayjs(e.date).format('YYYY-MM-DD'),
+        amount: Number(e.amount)
+      }));
+      setExpenses(cleaned);
+    });
+  };
+
+  const getTotalExpense = (expenses, mode) => {
+    const today = dayjs();
+    return expenses.reduce((sum, e) => {
+      const d = dayjs(e.date, 'YYYY-MM-DD');
+      if (mode === 'day' && d.isSame(today, 'day')) return sum + Number(e.amount);
+      if (mode === 'week' && d.isBetween(today.startOf('week'), today.endOf('week'), null, '[]')) return sum + Number(e.amount);
+      if (mode === 'month' && d.isSame(today, 'month')) return sum + Number(e.amount);
+      if (mode === 'year' && d.isSame(today, 'year')) return sum + Number(e.amount);
+      return sum;
+    }, 0);
+  };
+
+  const totalExpense = useMemo(() => getTotalExpense(expenses, viewMode), [expenses, viewMode]);
+
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerRow}>
-  <Text style={styles.title}>Budget Tracker</Text>
-  
-  <View style={styles.userDropdownContainer}>
-    <TouchableOpacity onPress={() => setDropdownVisible(!dropdownVisible)} style={styles.dropdownToggle}>
-      <Text style={styles.username}>{username}</Text>
-    </TouchableOpacity>
+        <Text style={styles.title}>Budget Tracker</Text>
+        
+        <View style={styles.userDropdownContainer}>
+          <TouchableOpacity onPress={() => setDropdownVisible(!dropdownVisible)} style={styles.dropdownToggle}>
+            <Text style={styles.username}>{username}</Text>
+          </TouchableOpacity>
 
-    {dropdownVisible && (
-      <View style={styles.dropdownMenu}>
+          {dropdownVisible && (
+            <View style={styles.dropdownMenu}>
+              <TouchableOpacity
+                onPress={() => {
+                  setDropdownVisible(false);
+                  setCategoryModalVisible(true);
+                }}
+              >
+                <Text style={styles.dropdownItem}>Manage Categories</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  setDropdownVisible(false);
+                  handleLogout();
+                }}
+              >
+                <Text style={styles.dropdownItem}>Logout</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </View>
+
+      {/* Action buttons at the top */}
+      <View style={styles.actionButtonsContainer}>
         <TouchableOpacity
-          onPress={() => {
-            setDropdownVisible(false);
-            setCategoryModalVisible(true);
-          }}
+          style={styles.actionButton}
+          onPress={() => setFetchModalVisible(true)}
         >
-          <Text style={styles.dropdownItem}>Manage Categories</Text>
+          <Text style={styles.actionButtonText}>Fetch</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          onPress={() => {
-            setDropdownVisible(false);
-            handleLogout();
-          }}
+        <TouchableOpacity 
+          style={styles.actionButton} 
+          onPress={handleEditOpen}
         >
-          <Text style={styles.dropdownItem}>Logout</Text>
+          <Text style={styles.actionButtonText}>Edit</Text>
         </TouchableOpacity>
       </View>
-    )}
-  </View>
-</View>
 
-<TouchableOpacity
-  style={styles.saveButton}
-  onPress={() => setFetchModalVisible(true)}
->
-  <Text style={styles.buttonText}>Fetch</Text>
-</TouchableOpacity>
-
-<Modal visible={fetchModalVisible} transparent animationType="slide" onRequestClose={() => setFetchModalVisible(false)}>
+      <Modal visible={fetchModalVisible} transparent animationType="slide" onRequestClose={() => setFetchModalVisible(false)}>
         <View style={styles.modalContainer}>
           <View style={styles.modal}>
             <FlatList
@@ -463,17 +512,15 @@ const [editDate, setEditDate] = useState(new Date());
           </View>
         </View>
       </Modal>
-      <TouchableOpacity style={styles.fetchButton} onPress={handleEditOpen}>
-        <Text style={styles.buttonText}>Edit</Text>
-      </TouchableOpacity>
-
+      
+      {/* Edit Modal - Improved structure */}
       <Modal visible={editModalVisible} transparent animationType="slide" onRequestClose={() => setEditModalVisible(false)}>
         <View style={styles.modalContainer}>
           <ScrollView style={styles.modal}>
-            <Text style={styles.title}>Edit Existing Expenses</Text>
+            <Text style={styles.modalTitle}>Edit Existing Expenses</Text>
 
             <TouchableOpacity onPress={() => setOpenEditDatePicker(true)} style={styles.dateButton}>
-              <Text>{dayjs(editDate).format('YYYY-MM-DD')}</Text>
+              <Text style={styles.dateText}>{dayjs(editDate).format('YYYY-MM-DD')}</Text>
             </TouchableOpacity>
 
             <DatePicker
@@ -489,125 +536,130 @@ const [editDate, setEditDate] = useState(new Date());
               mode="date"
             />
 
-{editExpenses.map((expense, idx) => (
-  <View key={idx} style={styles.expenseItem}>
-    <TextInput
-      value={expense.itemName}
-      onChangeText={text => {
-        const updated = [...editExpenses];
-        updated[idx].itemName = text;
-        setEditExpenses(updated);
-      }}
-      placeholder="Item Name"
-    />
-    <TextInput
-      value={String(expense.price)}
-      keyboardType="numeric"
-      onChangeText={text => {
-        const updated = [...editExpenses];
-        updated[idx].price = text;
-        setEditExpenses(updated);
-      }}
-      placeholder="Price"
-    />
-    <TextInput
-      value={String(expense.quantity)}
-      keyboardType="numeric"
-      onChangeText={text => {
-        const updated = [...editExpenses];
-        updated[idx].quantity = text;
-        setEditExpenses(updated);
-      }}
-      placeholder="Quantity"
-    />
+            {editExpenses.map((expense, idx) => (
+              <View key={idx} style={styles.editExpenseItem}>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Item Name</Text>
+                  <TextInput
+                    style={styles.editInput}
+                    value={expense.itemName}
+                    onChangeText={text => handleEditChange(idx, 'itemName', text)}
+                    placeholder="Item Name"
+                    placeholderTextColor="#999"
+                  />
+                </View>
 
-<TouchableOpacity
-  onPress={() => setOpenDatePickerIndex(idx)}
-  style={styles.dateButton}
->
-  <Text>{expense.date}</Text>
-</TouchableOpacity>
+                <View style={styles.inputRow}>
+                  <View style={[styles.inputGroup, {flex: 1, marginRight: 8}]}>
+                    <Text style={styles.inputLabel}>Price</Text>
+                    <TextInput
+                      style={styles.editInput}
+                      value={String(expense.price)}
+                      keyboardType="numeric"
+                      onChangeText={text => handleEditChange(idx, 'price', text)}
+                      placeholder="Price"
+                      placeholderTextColor="#999"
+                    />
+                  </View>
+                  
+                  <View style={[styles.inputGroup, {flex: 1}]}>
+                    <Text style={styles.inputLabel}>Quantity</Text>
+                    <TextInput
+                      style={styles.editInput}
+                      value={String(expense.quantity)}
+                      keyboardType="numeric"
+                      onChangeText={text => handleEditChange(idx, 'quantity', text)}
+                      placeholder="Quantity"
+                      placeholderTextColor="#999"
+                    />
+                  </View>
+                </View>
 
-<DatePicker
-  modal
-  open={openDatePickerIndex === idx}
-  date={dayjs(expense.date).toDate()}
-  onConfirm={(newDate) => {
-    const updated = [...editExpenses];
-    updated[idx].date = dayjs(newDate).format('YYYY-MM-DD');
-    setEditExpenses(updated);
-    setOpenDatePickerIndex(null);
-  }}
-  onCancel={() => setOpenDatePickerIndex(null)}
-  mode="date"
-/>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Date</Text>
+                  <TouchableOpacity
+                    onPress={() => setOpenDatePickerIndex(idx)}
+                    style={styles.editDateButton}
+                  >
+                    <Text style={styles.dateText}>{expense.date}</Text>
+                  </TouchableOpacity>
+                </View>
 
-    <Picker
-      selectedValue={expense.category}
-      onValueChange={(val) => {
-        const updated = [...editExpenses];
-        updated[idx].category = val;
-        setEditExpenses(updated);
-      }}
-      style={{ marginVertical: 4 }}
-    >
-      {categories.map((cat, i) => (
-        <Picker.Item key={i} label={cat.name} value={cat.name} />
-      ))}
-    </Picker>
+                <DatePicker
+                  modal
+                  open={openDatePickerIndex === idx}
+                  date={dayjs(expense.date).toDate()}
+                  onConfirm={(newDate) => {
+                    handleEditChange(idx, 'date', dayjs(newDate).format('YYYY-MM-DD'));
+                    setOpenDatePickerIndex(null);
+                  }}
+                  onCancel={() => setOpenDatePickerIndex(null)}
+                  mode="date"
+                />
 
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-      <TouchableOpacity
-        onPress={() => handleUpdateExpense(expense)}
-        style={[styles.button, { marginRight: 10 }]}
-      >
-        <Text style={styles.buttonText}>Save</Text>
-      </TouchableOpacity>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Category</Text>
+                  <View style={styles.pickerContainer}>
+                    <Picker
+                      selectedValue={expense.category}
+                      onValueChange={(val) => handleEditChange(idx, 'category', val)}
+                    >
+                      {categories.map((cat, i) => (
+                        <Picker.Item key={i} label={cat.name} value={cat.name} />
+                      ))}
+                    </Picker>
+                  </View>
+                </View>
 
-      <TouchableOpacity
-        onPress={() => {
-          Alert.alert(
-            'Confirm Delete',
-            'Are you sure you want to delete this expense?',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Yes', onPress: () => handleDeleteExpense(expense.id) },
-            ]
-          );
-        }}
-        style={[styles.button, styles.cancelButton]}
-      >
-        <Text style={styles.buttonText}>Delete</Text>
-      </TouchableOpacity>
-    </View>
-  </View>
-))}
+                <View style={styles.editButtonRow}>
+                  <TouchableOpacity
+                    onPress={() => handleUpdateExpense(expense)}
+                    style={styles.editActionButton}
+                  >
+                    <Text style={styles.buttonText}>Save</Text>
+                  </TouchableOpacity>
 
+                  <TouchableOpacity
+                    onPress={() => {
+                      Alert.alert(
+                        'Confirm Delete',
+                        'Are you sure you want to delete this expense?',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Yes', onPress: () => handleDeleteExpense(expense.id) },
+                        ]
+                      );
+                    }}
+                    style={[styles.editActionButton, styles.deleteButton]}
+                  >
+                    <Text style={styles.buttonText}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
 
-            <Pressable style={[styles.button, styles.cancelButton, { marginTop: 10 }]} onPress={() => setEditModalVisible(false)}>
+            <Pressable 
+              style={[styles.button, styles.cancelButton, { marginTop: 20, marginBottom: 10 }]} 
+              onPress={() => setEditModalVisible(false)}
+            >
               <Text style={styles.buttonText}>Close</Text>
             </Pressable>
           </ScrollView>
         </View>
       </Modal>
 
-
-  <View style={styles.centeredHeader}>
-  <TouchableOpacity onPress={cycleViewMode} style={styles.circleButton}>
-    <Text style={styles.viewModeLabel}>{viewModeText[viewMode]}</Text>
-    <Text style={styles.totalAmount}>₹{totalExpense.toFixed(2)}</Text>
-  </TouchableOpacity>
-</View>
-
-      
-
+      <View style={styles.centeredHeader}>
+        <TouchableOpacity onPress={cycleViewMode} style={styles.circleButton}>
+          <Text style={styles.viewModeLabel}>{viewModeText[viewMode]}</Text>
+          <Text style={styles.totalAmount}>₹{totalExpense.toFixed(2)}</Text>
+        </TouchableOpacity>
+      </View>
       
       <TouchableOpacity style={styles.fab} onPress={() => setModalVisible(true)}>
         <Icon name="plus" size={24} color="#fff" />
       </TouchableOpacity>
-
       
-      {/* Expense Modal */}
+      {/* Add Expense Modal - left unchanged as requested */}
       <Modal
         visible={modalVisible}
         transparent
@@ -748,17 +800,16 @@ const [editDate, setEditDate] = useState(new Date());
               </View>
             ))}
             <TouchableOpacity
-  onPress={() => {
-    deleteAllCategories(() => {
-      console.log('✅ Categories');
-      Toast.show({ type: 'success', text1: 'All categories deleted' });
-    });
-  }}
-  style={{ backgroundColor: 'red', padding: 12, borderRadius: 8, margin: 10 }}
->
-  <Text style={{ color: 'white', textAlign: 'center' }}>Delete All Categories</Text>
-</TouchableOpacity>
-
+              onPress={() => {
+                deleteAllCategories(() => {
+                  console.log('✅ Categories');
+                  Toast.show({ type: 'success', text1: 'All categories deleted' });
+                });
+              }}
+              style={{ backgroundColor: 'red', padding: 12, borderRadius: 8, margin: 10 }}
+            >
+              <Text style={{ color: 'white', textAlign: 'center' }}>Delete All Categories</Text>
+            </TouchableOpacity>
 
             <View style={styles.modalButtons}>
               <Pressable
@@ -786,14 +837,106 @@ const [editDate, setEditDate] = useState(new Date());
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#f9f9f9' },
-  title: { fontSize: 24, fontWeight: 'bold' },
+  container: { 
+    flex: 1, 
+    padding: 20, 
+    backgroundColor: '#f9f9f9' 
+  },
+  title: { 
+    fontSize: 24, 
+    fontWeight: 'bold' 
+  },
   viewModeText: {
     fontSize: 18,
     fontWeight: '600',
     marginVertical: 15,
     textAlign: 'center',
   },
+  // Action buttons container
+  actionButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 15,
+  },
+  actionButton: {
+    flex: 1,
+    backgroundColor: '#000',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginHorizontal: 5,
+  },
+  actionButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  // Edit expense item styling
+  editExpenseItem: {
+    backgroundColor: '#fff',
+    padding: 16,
+    marginVertical: 8,
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  inputGroup: {
+    marginBottom: 12,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#555',
+    marginBottom: 4,
+  },
+  editInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 6,
+    padding: 10,
+    fontSize: 16,
+    color: '#333',
+    backgroundColor: '#fafafa',
+  },
+  editDateButton: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 6,
+    padding: 12,
+    backgroundColor: '#fafafa',
+    alignItems: 'center',
+  },
+  pickerContainer: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 6,
+    backgroundColor: '#fafafa',
+  },
+  editButtonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  editActionButton: {
+    flex: 1,
+    backgroundColor: '#000',
+    padding: 12,
+    borderRadius: 6,
+    alignItems: 'center',
+    marginHorizontal: 4,
+  },
+  deleteButton: {
+    backgroundColor: '#d33',
+  },
+  // Original styles
   expenseItem: {
     backgroundColor: '#fff',
     padding: 12,
@@ -826,6 +969,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderTopLeftRadius: 15,
     borderTopRightRadius: 15,
+    maxHeight: '90%',
   },
   modalTitle: {
     fontSize: 20,
@@ -841,7 +985,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
   },
-  dateText: { fontSize: 16 },
+  dateText: { 
+    fontSize: 16,
+    color: '#333', 
+  },
   input: {
     borderWidth: 1,
     borderColor: '#ccc',
@@ -869,8 +1016,11 @@ const styles = StyleSheet.create({
   saveButton: {
     backgroundColor: '#000',
   },
-  buttonText: { color: 'white', fontWeight: 'bold' },
-
+  buttonText: { 
+    color: 'white', 
+    fontWeight: 'bold',
+    fontSize: 15,
+  },
   categoryButton: {
     backgroundColor: '#333',
     padding: 12,
@@ -878,14 +1028,11 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginTop: 10,
   },
-
   centeredHeader: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  
-  
   circleButton: {
     width: 220,
     height: 220,
@@ -896,41 +1043,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 5,
-    
   },
-  
   viewModeLabel: {
     fontSize: 20,
     color: '#000',  // Black text
     fontWeight: '600',
     marginBottom: 6,
-    
   },
-  
   totalAmount: {
     fontSize: 28,
-  color: '#000',  // Black text
-  fontWeight: 'bold',
+    color: '#000',  // Black text
+    fontWeight: 'bold',
   },
-
-  headerRow: {
+  headerRow: {  
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 10,
   },
-  
   userDropdown: {
     padding: 8,
     borderRadius: 8,
   },
-  
   username: {
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
   },
-  
   dropdownMenu: {
     position: 'absolute',
     top: 38,
@@ -944,14 +1083,11 @@ const styles = StyleSheet.create({
     elevation: 5,
     zIndex: 10,
   },
-
   dropdownItem: {
     paddingVertical: 10,
     fontSize: 14,
     color: '#333',
   },
-  
-  
   userDropdownContainer: {
     position: 'relative',
   },
@@ -964,7 +1100,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  
   radioCircle: {
     height: 20,
     width: 20,
@@ -975,12 +1110,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 8,
   },
-  
   radioSelected: {
     backgroundColor: '#000',
   },
   radioText: { fontSize: 16 },
-  
   radioLabel: {
     fontSize: 16,
     color: '#000',
@@ -989,7 +1122,7 @@ const styles = StyleSheet.create({
   radioGroup: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 10 },
   radioButton: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   fetchButton: { backgroundColor: '#000', padding: 12, borderRadius: 8, alignItems: 'center', marginBottom: 10 },
-  
+  totalText: { fontSize: 16, fontWeight: 'bold', marginTop: 10 },
 });
 
 export default BudgetScreen;

@@ -10,6 +10,7 @@ export const createTables = () => {
   db.transaction(tx => {
     tx.executeSql(
       `CREATE TABLE IF NOT EXISTS Expenses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         userEmail TEXT NOT NULL,
         date DATE NOT NULL,
         itemName TEXT NOT NULL,
@@ -26,7 +27,8 @@ export const createTables = () => {
       }
     );
     tx.executeSql(
-        `CREATE TABLE IF NOT EXISTS Categories (
+      `CREATE TABLE IF NOT EXISTS Categories (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
           userEmail TEXT NOT NULL,
           name TEXT UNIQUE NOT NULL,
           limit_day REAL,
@@ -276,33 +278,31 @@ export const fetchExpensesForDate = (userEmail, date, callback) => {
 
 
 export const updateExpense = (expense, callback) => {
-  const { itemName, price, quantity, category, date } = expense;
-  const amount = Number(price) * Number(quantity);
-
+  const { id, date, itemName, price, quantity, amount, category } = expense;
   db.transaction(tx => {
     tx.executeSql(
-      `UPDATE expenses SET itemName = ?, price = ?, quantity = ?, amount = ?, category = ?, date = ?`,
-      [itemName, price, quantity, amount, category, date],
-      () => callback(),
+      `UPDATE expenses SET date=?, itemName=?, price=?, quantity=?, amount=?, category=? WHERE id=?`,
+      [date, itemName, price, quantity, amount, category, id],
+      (_, result) => callback?.(result),
       (_, error) => {
         console.error('❌ Error updating expense:', error);
-        return true;
+        return false;
       }
     );
   });
 };
 
-export const deleteExpense = (callback) => {
+// ✅ DELETE expense by ID
+export const deleteExpense = (id, callback) => {
   db.transaction(tx => {
     tx.executeSql(
-      `DELETE FROM expenses`,
-      [],
-      () => callback(),
+      `DELETE FROM expenses WHERE id=?`,
+      [id],
+      (_, result) => callback?.(result),
       (_, error) => {
         console.error('❌ Error deleting expense:', error);
-        return true;
+        return false;
       }
     );
   });
 };
-
